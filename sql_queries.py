@@ -17,13 +17,13 @@ staging_schema_create = "CREATE SCHEMA IF NOT EXISTS staging"
 
 # DROP TABLES
 
-staging_events_table_drop = "DROP TABLES IF EXISTS staging.events;"
-staging_songs_table_drop = "DROP TABLES IF EXISTS staging.songs;"
-songplay_table_drop = "DROP TABLES IF EXISTS final.songplay;"
-user_table_drop = "DROP TABLES IF EXISTS final.user;"
-song_table_drop = "DROP TABLES IF EXISTS final.song;"
-artist_table_drop = "DROP TABLES IF EXISTS final.artist;"
-time_table_drop = "DROP TABLES IF EXISTS final.time;"
+staging_events_table_drop = "DROP TABLE IF EXISTS staging.events;"
+staging_songs_table_drop = "DROP TABLE IF EXISTS staging.songs;"
+songplay_table_drop = "DROP TABLE IF EXISTS final.songplay;"
+user_table_drop = "DROP TABLE IF EXISTS final.user;"
+song_table_drop = "DROP TABLE IF EXISTS final.song;"
+artist_table_drop = "DROP TABLE IF EXISTS final.artist;"
+time_table_drop = "DROP TABLE IF EXISTS final.time;"
 
 # CREATE TABLES
 
@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS staging.events(
     location VARCHAR(255),
     method VARCHAR(255),
     page VARCHAR(255),
+    registration FLOAT,
     sessionId INT,
     song VARCHAR(255),
     status INT,
@@ -94,7 +95,7 @@ CREATE TABLE IF NOT EXISTS final.songs(
     title VARCHAR(255),
     artist_id VARCHAR(255),
     year INT,
-    duration FLOAT,
+    duration FLOAT
 );
 """)
 
@@ -123,7 +124,7 @@ CREATE TABLE IF NOT EXISTS final.time(
 # STAGING TABLES
 
 staging_events_copy = ("""
-COPY staging.events FROM '{}'
+COPY staging.events FROM {}
 CREDENTIALS 'aws_iam_role={}'
 REGION '{}'
 FORMAT AS JSON {};
@@ -134,10 +135,10 @@ FORMAT AS JSON {};
             )
 
 staging_songs_copy = ("""
-COPY staging.events FROM '{}'
+COPY staging.songs FROM {}
 CREDENTIALS 'aws_iam_role={}'
 REGION '{}'
-FORMAT AS JSON {};
+FORMAT AS JSON 'auto';
 """).format(config.get('S3', 'SONG_DATA'),
             config.get('IAM_ROLE', 'IAM_ROLE_ARN'),
             config.get('CLUSTER', 'DWH_REGION')
@@ -158,13 +159,13 @@ INSERT INTO final.songplay(
 )
 SELECT DISTINCT 
     timestamp 'epoch' + se.ts/1000 * interval '1 second' AS start_time,
-    se.user_id,
+    se.userId,
     se.level,
     ss.song_id,
     ss.artist_id,
-    se.session_id ,
+    se.sessionId ,
     se.location,
-    se.user_agent
+    se.userAgent
 FROM staging.songs AS ss
 JOIN staging.events AS se
 ON ss.title = se.song AND ss.artist_name = se.artist
@@ -179,12 +180,13 @@ INSERT INTO final.users(
     gender,
     level)
 SELECT DISTINCT
-    se.userId
+    se.userId,
     se.firstName,
     se.lastName,
     se.gender,
     se.level
-FROM staging.events as se
+FROM staging.events AS se
+WHERE se.userId IS NOT NULL;
 """)
 
 song_table_insert = ("""
@@ -201,6 +203,7 @@ SELECT DISTINCT
     ss.year,
     ss.duration
 FROM staging.songs as ss
+WHERE ss.song_id IS NOT NULL;
 """)
 
 artist_table_insert = ("""
@@ -217,6 +220,7 @@ SELECT DISTINCT
     ss.artist_latitude,
     ss.artist_longitude
 FROM staging.songs AS ss
+WHERE artist_id IS NOT NULL;
 """)
 
 time_table_insert = ("""
