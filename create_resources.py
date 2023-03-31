@@ -3,6 +3,7 @@ import json
 import sys
 import psycopg2
 import configparser
+from time import sleep
 
 #Create clients for IAM, EC2, S3 and Redshift¶
 def create_clients(DWH_REGION, AWS_ACCESS_KEY, AWS_SECRET_ACCESS_KEY):
@@ -62,11 +63,12 @@ def create_iam_role(iam, IAM_ROLE_NAME):
         print("1.3 Get the IAM role ARN")
         roleArn = iam.get_role(RoleName = IAM_ROLE_NAME)['Role']['Arn']
         print("\n Role ARN: {}".format(str(roleArn)))
+        return roleArn
 
     except Exception as e:
         print("Exception attaching policy: {}".format(str(e)))
 
-def create_cluster(redshift, DWH_CLUSTER_TYPE, DWH_NODE_TYPE, DWH_NUM_NODES, DWH_DB, DWH_CLUSTER_IDENTIFIER, DWH_DB_USER, DWH_DB_PASSWORD, roleArn):
+def create_cluster(redshift, DWH_CLUSTER_TYPE, DWH_NODE_TYPE, DWH_NUM_NODES, DWH_DB, DWH_CLUSTER_IDENTIFIER, DWH_DB_USER, DWH_DB_PASSWORD, roleArn: str):
     try:
         res = redshift.create_cluster(        
             #HW
@@ -85,20 +87,38 @@ def create_cluster(redshift, DWH_CLUSTER_TYPE, DWH_NODE_TYPE, DWH_NUM_NODES, DWH
         )
     except Exception as e:
         print("\nError creating cluster: {}".format(e))
-        return None
-    else:
-        return res['Cluster']
+    
+    print("Check if cluster is already")
+    while True:
+        checkResponse = redshift.describe_clusters(
+            ClusterIdentifier=DWH_CLUSTER_IDENTIFIER
+        )
+        cluster = checkResponse['Clusters'][0]
+        if cluster['ClusterStatus'] == 'available':
+            print("Cluster {} available".format(DWH_CLUSTER_IDENTIFIER))
+            break
+        print("Cluster {} is creating...".format(DWH_CLUSTER_IDENTIFIER))
+        sleep(60)
+    print("Cluster {} is ready".format(DWH_CLUSTER_IDENTIFIER))
+    return cluster
 
 def get_cluster(redshift, DWH_CLUSTER_IDENTIFIER):
-    try:
+    while True:
         res = redshift.describe_clusters(
             ClusterIdentifier=DWH_CLUSTER_IDENTIFIER
         )
+        cluster = res['Clusters'][0]
+        if cluster['ClusterStatus'] == 'available':
+            print("Cluster {} available".format(DWH_CLUSTER_IDENTIFIER))
+            break
+        print("Cluster {} is creating...".format(DWH_CLUSTER_IDENTIFIER))
+        sleep(60)
+    try:
+        DWH_ENDPOINT = cluster['Endpoint']['Address']
+        IAM_ROLE_ARN = cluster['IamRoles'][0]['IamRoleArn']
+        return cluster, DWH_ENDPOINT, IAM_ROLE_ARN
     except Exception as e:
         print("\nError getting cluster: {}".format(e))
-        return None
-    else:
-        return res['Clusters'][0]
 
 def open_tcp_port(ec2, cluster, DWH_PORT):
     try:
@@ -117,7 +137,7 @@ def open_tcp_port(ec2, cluster, DWH_PORT):
     return defaultSg.id
 
 def check_cluster_available(DWH_DB_USER, DWH_DB_PASSWORD, DWH_ENDPOINT, DWH_PORT, DWH_DB):
-    conn_string="postgresql://{}:{}@{}:{}/{}".format(DWH_DB_USER, DWH_DB_PASSWORD, DWH_ENDPOINT, DWH_PORT,DWH_DB)
+    conn_string="postgresql://{}:{}@{}:{}/{}".format(DWH_DB_USER, DWH_DB_PASSWORD, DWH_ENDPOINT, DWH_PORT, DWH_DB)
     connect = psycopg2.connect(conn_string)
     print(connect.status)
     connect.close()
@@ -125,8 +145,8 @@ def check_cluster_available(DWH_DB_USER, DWH_DB_PASSWORD, DWH_ENDPOINT, DWH_PORT
 def main():
     config = configparser.ConfigParser()
     config.read_file(open('dwh.cfg'))
-    AWS_ACCESS_KEY          = config.get('AWS','KEY')
-    AWS_SECRET_ACCESS_KEY   = config.get('AWS','SECRET')
+    AWS_ACCESS_KEY          = config.get('AWS','AWS_ACCESS_KEY')
+    AWS_SECRET_ACCESS_KEY   = config.get('AWS','AWS_SECRET_ACCESS_KEY')
 
     DWH_REGION              = config.get("CLUSTER","DWH_REGION")
     DWH_CLUSTER_IDENTIFIER  = config.get("CLUSTER","DWH_CLUSTER_IDENTIFIER")
@@ -145,7 +165,7 @@ def main():
 
     roleArn = create_iam_role(iam, IAM_ROLE_NAME)
 
-    cluster = create_cluster(redshift, 
+    create_cluster(redshift, 
                              DWH_CLUSTER_TYPE, DWH_NODE_TYPE, DWH_NUM_NODES, DWH_DB, DWH_CLUSTER_IDENTIFIER, 
                              DWH_DB_USER, DWH_DB_PASSWORD, roleArn)
     
@@ -154,12 +174,12 @@ def main():
     IAM_SECURITY_GROUP = open_tcp_port(ec2, cluster, DWH_PORT)
 
     config.set("CLUSTER", "DWH_HOST", DWH_ENDPOINT)
-    config.set("IAM", "IAM_ROLE_ARN", IAM_ROLE_ARN)
-    config.set("CLUSTER", "IAM_SECURITY_GROUP", IAM_SECURITY_GROUP)
+    config.set("IAM_ROLE", "IAM_ROLE_ARN", IAM_ROLE_ARN)
+    config.set("IAM_ROLE", "IAM_SECURITY_GROUP", IAM_SECURITY_GROUP)
     with open('dwh.cfg', 'w') as configfile:
         config.write(configfile)
 
-    check_cluster_available(DWH_DB_USER, DWH_DB_PASSWORD, DWH_ENDPOINT, DWH_PORT)
+    check_cluster_available(DWH_DB_USER, DWH_DB_PASSWORD, DWH_ENDPOINT, DWH_PORT, DWH_DB)
 
 if __name__ == "__main__":
     main()
