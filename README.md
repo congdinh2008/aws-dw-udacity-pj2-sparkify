@@ -9,6 +9,8 @@ As their data engineer, you are tasked with building an ETL pipeline that extrac
 <img src="./images/sparkify-s3-to-redshift-etl.png">
 System Architecture for AWS S3 to Redshift ETL
 
+Project using dataset is subset of <a href="http://millionsongdataset.com/">Million Song Dataset</a>
+
 ## Project Description
 
 In this project, you'll apply what you've learned on data warehouses and AWS to build an ETL pipeline for a database hosted on Redshift. To complete the project, you will need to load data from S3 to staging tables on Redshift and execute SQL statements that create the analytics tables from these staging tables.
@@ -77,3 +79,31 @@ And below is what data is in log_json_path.json.
 
 <img src="./images/database_schemas-Final Schema.jpg">
 
+## How to run code
+
+### Clone the project
+
+```
+git clone https://github.com/congdinh2008/aws-dw-udacity-pj2-sparkify.git
+```
+
+### Install package
+
+#### Should be create a virtual environment (venv), activate it
+```
+$ python3 -m venv /path/to/new/venv
+$ source venv/bin/activate
+```
+
+```
+$ pip3 install boto3
+$ pip3 install psycopg2-binary
+$ pip3 install pandas
+$ pip3 install matplotlib
+$ pip3 install ipython-sql
+$ pip3 install pandas
+```
+
+### Open dw_notebook.ipynb
+
+Run code follow by markdown
