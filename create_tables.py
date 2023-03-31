@@ -30,7 +30,13 @@ def main():
     config = configparser.ConfigParser()
     config.read('dwh.cfg')
 
-    conn = psycopg2.connect("host={} dbname={} user={} password={} port={}".format(*config['CLUSTER'].values()))
+    conn = psycopg2.connect("host={} dbname={} user={} password={} port={}".format(
+        config.get('CLUSTER', "DWH_HOST"),
+        config.get('CLUSTER', "DWH_DB_NAME"),
+        config.get('CLUSTER', "DWH_DB_USER"),
+        config.get('CLUSTER', "DWH_DB_PASSWORD"),
+        config.get('CLUSTER', "DWH_PORT")
+    ))
     cur = conn.cursor()
 
     drop_schemas(cur, conn)
